@@ -18,6 +18,16 @@ import com.facebook.react.bridge.Arguments;
 import org.apache.commons.net.ftp.FTP;
 import org.apache.commons.net.ftp.FTPClient;
 import org.apache.commons.net.ftp.FTPFile;
+
+import java.util.Calendar;
+import org.apache.commons.net.ftp.FTPClientConfig;
+import org.apache.commons.net.ftp.FTPFileEntryParser;
+import org.apache.commons.net.ftp.parser.FTPFileEntryParserFactory;
+import org.apache.commons.net.ftp.parser.ParserInitializationException;
+import org.apache.commons.net.ftp.parser.UnixFTPEntryParser;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -80,6 +90,45 @@ public class RNFtpClientModule extends ReactContextBaseJavaModule {
     client.connect(this.ip_address,this.port);
     client.enterLocalPassiveMode();
     client.login(this.username, this.password);
+
+    client.setParserFactory(new FTPFileEntryParserFactory() {
+        private final FTPFileEntryParser parser = new UnixFTPEntryParser() {
+            @Override
+            public FTPFile parseFTPEntry(String entry) {
+                FTPFile ftpFile = new FTPFile();
+
+                Pattern r = Pattern.compile("\\d{2}-\\d{2}-\\d{4}\\s+\\d{2}:\\d{2}(AM|PM)\\s+(\\d+|<DIR>)\\s+(.*)");
+                Matcher m = r.matcher(entry);
+
+                if (m.find()) {
+                    String size = m.group(2);
+                    size = size != null ? size.trim() : "0";
+                    String filename = m.group(3);
+                    filename = filename != null ? filename.trim() : "N.A.";
+
+                    boolean isDir = size.equals("<DIR>");
+                    ftpFile.setType(isDir ? FTPFile.DIRECTORY_TYPE : FTPFile.FILE_TYPE);
+                    ftpFile.setName(filename);
+                    ftpFile.setTimestamp(Calendar.getInstance());
+                    if (!isDir)
+                        ftpFile.setSize(Integer.parseInt(size));
+                    return ftpFile;
+                } else {
+                    return null;
+                }
+            }
+        };
+
+        @Override
+        public FTPFileEntryParser createFileEntryParser(String key) throws ParserInitializationException {
+            return parser;
+        }
+
+        @Override
+        public FTPFileEntryParser createFileEntryParser(FTPClientConfig config) throws ParserInitializationException {
+            return parser;
+        }
+    });
   }
 
   private void logout(FTPClient client) {
